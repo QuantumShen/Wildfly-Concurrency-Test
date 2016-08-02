@@ -1,0 +1,201 @@
+<h1 id="performance-test-report-of-cpu-intensive-rest-api-on-aws-t2micro-wildfly-server">Performance Test Report of CPU Intensive REST API on AWS t2.micro Wildfly Server</h1>
+
+
+
+<h2 id="server-side-design">Server-side Design</h2>
+
+
+
+<h4 id="server-configuration">Server Configuration</h4>
+
+<ol>
+<li><p>AWS t2.micro Cloud Server</p>
+
+<ul><li>CPU: Single Core, Intel Xeon E5-2670v2 @2.50GHz</li>
+<li>Memory: 1GB</li>
+<li>Hard Disk: General SSD 30GB</li>
+<li>Public IP: 52.42.56.228</li></ul></li>
+<li><p>Software Platform</p>
+
+<ul><li>Windows Server 2012 R2</li>
+<li>Wildlfly 10.0.0</li>
+<li>Apache Maven 3.3.0 </li>
+<li>JDK 1.8.0</li></ul></li>
+</ol>
+
+<h4 id="rest-api-service">REST API service</h4>
+
+<ol>
+<li>Implementation based JBoss ReasEasy, which is a <code>JAX_RS 2.0</code> Implementation provided by JBoss AS and bundled with Wildfly.</li>
+<li><p>Four HTTP GET APIs are implemented to provide a calculator service, in such forms:</p>
+
+<pre><code>http://52.42.56.228:8080/add?operand1=10&amp;operand2=20
+http://52.42.56.228:8080/substract?operand1=10&amp;operand2=20 
+http://52.42.56.228:8080/multiply?operand1=10&amp;operand2=20
+http://52.42.56.228:8080/divide?operand1=10&amp;operand2=20
+</code></pre></li>
+<li><p>To get a <code>HTTP 200</code> response, the APIs are case sensitive. </p></li>
+<li>The successful respond message is plain text. The message is <code>error input</code> if no valid operands are given. Valid operands are integers, floating point numbers in plain form or scientific form like <code>3.14</code>, <code>2E10</code>, <code>1.0e5</code>.</li>
+<li>Project is managed and deployed using Maven to root folder of wildfly server.</li>
+<li>The source code is called <code>CalculatorREST.java</code> which can be found in the folder <code>/calculator/src/main/java/com/sensorhound/calculator</code> with this report.</li>
+</ol>
+
+<h2 id="client-side-design">Client-side Design</h2>
+
+
+
+<h4 id="client-test-principles">Client test principles</h4>
+
+<ol>
+<li>To fully stress the server in concurrency requests, the client should simulate many users requesting the API simultaneously.</li>
+<li>The users are simulated by multiple threads. Each thread connects to the server and requests repeatedly. To parallel the threads, the waiting of response must be non-blocked. </li>
+<li>Above principles can be realized using <code>javax.ws.rs.client</code> in RestEasy client library and <code>java.util.concurrent</code>.</li>
+</ol>
+
+
+
+<h4 id="client-program-user-guide-same-as-readmetxt-in-calculatorclient">Client program user guide (Same as <code>Readme.txt</code> in <code>/calculatorClient/</code>)</h4>
+
+<ol>
+<li><p>The client can accept five optional parameters. <br>
+(1) Number of users: an integer (A user is a standalone thread) <br>
+(2) Requests per user: an integer <br>
+The above two parameters should be provided together. Otherwise, 10 users and 10 requests are used by default. <br>
+(3) Operator: <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code> , <code>all</code> <br>
+Operator is <code>all</code> if not provided. <code>all</code> means all the four APIs will be tested randomly. <br>
+(4) Operand1: either integer or float point number <br>
+(5) Operand2: either integer or float point number <br>
+The two operands should be provided together. Otherwise, the operands will be a pair of random integers for each user.</p>
+
+<p>In fact, the best way to use the client is to provide only the first two parameters. The client will test all APIs with random operands automatically.</p></li>
+<li><p>Build and execute the client <br>
+(1) You need to have JDK 1.8.0 and Maven (better newest version) on your computer and configured correctly. <br>
+(2) Go to <code>/calculatorClient/</code> in command line. <br>
+(3) Execute <code>mvn clean compile</code> <br>
+(4) Execute <code>mvn exec:java -Dexec.mainClass="com.sensorhound.client.CalculatorClient"</code> to run the default 10 x 10 test. <br>
+(5) If succeed, you will find a <code>log10x10.csv</code> file in the current folder <code>/calculatorClient/</code>. <br>
+(6) Try larger parameters such as: <br>
+<code>mvn exec:java -Dexec.mainClass="com.sensorhound.client.CalculatorClient" -Dexec.args="1000 1000"</code> <br>
+(7)  A new empty <code>logMxN.csv</code> will be created each time you execute the client. So if you want to keep file after execution, you must rename it or move it away.</p></li>
+</ol>
+
+<h2 id="test-results">Test Results</h2>
+
+
+
+<h4 id="test-1-1000-x-1000">Test 1: 1000 x 1000</h4>
+
+<p>The first test is to simulate 1000 user requesting 1000 times.  <br>
+The log file is <code>/report/TestData/log1000x1000.csv</code> .  <br>
+The test takes about 495s. <br>
+(1) Response Delay</p>
+
+<ul>
+<li><p>The first 10s: <br>
+When 1000 connections are invoked at the same time, the server has a large response delay. <br>
+The first request of most threads are slightly above 1000ms. But no one takes longer than 20000ms which is the threshold of <code>TIMEOUT</code> in the client. <br>
+The server CPU usage ramps to 100% in a short time. <br>
+<img src="https://lh3.googleusercontent.com/-voyddVQPqLo/V5XtlKQ17bI/AAAAAAAABD4/2WqXb4iOM-oZICdwaDtPJzV-pY_movtSwCLcB/s0/1.PNG" alt="enter image description here" title="REST test 1.PNG"></p></li>
+<li><p>The middle 470s: <br>
+In steady time, about 430ms response delay and the server has about 70% CPU usage. <br>
+<img src="https://lh3.googleusercontent.com/-iBPDPv5xLyU/V5XvK8gOwyI/AAAAAAAABEI/olnDebcCTVg37pRPuh-PD8M0zaY3qEd2wCLcB/s0/2.PNG" alt="enter image description here" title="REST test 2.png"></p></li>
+<li><p>The last 15s: <br>
+Threads finished their requests and stops one by one. The response delay drops gradually to 80ms, which represent the best the server can have. CPU usage drops down to 2%. <br>
+<img src="https://lh3.googleusercontent.com/-cCHZwj3ptS0/V5Xv6DjtBNI/AAAAAAAABEU/KrzV3r4ZqKMUodhLaN3Vpvl6U2u20mOSwCLcB/s0/3.PNG" alt="enter image description here" title="3.PNG"></p></li>
+</ul>
+
+<p>(2) QPS: <br>
+In about 495s, 1000,000 requests are tested and successfully responded. So the <code>average QPS</code> = 2020, which is approximately equal to the real time QPS in the second half time. <br>
+The  column <code>Success QPS</code> in the file is computed based on successful requests before. Which represent the servers concurrency response ability.</p>
+
+<p>(3) Error type and Error Ratio <br>
+Two types of error are recorded, one is <code>Time Out</code>(large than 20s), the other is <code>Unable to invoke request</code>. In this case no error occurred.</p>
+
+<h4 id="test-2-2000-x-100">Test 2: 2000 x 100</h4>
+
+<p>The second test is to simulate 2000 user requesting 100 times. <br>
+The log file is <code>/report/TestData/log2000x100.csv</code> .  <br>
+The test takes about 116s. <br>
+The CPU usage is about 85% in steady state. <br>
+<img src="https://lh3.googleusercontent.com/-0hsKa2nnt2A/V5YDUq08NHI/AAAAAAAABFM/psAXJCl75_QoZk-KvToEtZjhdBxbFZM1gCLcB/s0/2000.100.2.PNG" alt="enter image description here" title="2000.100.PNG"></p>
+
+<p>(1) Response Delay <br>
+The response delay is large ( 2±1 s )  and undulate heavily. </p>
+
+<p>(2) QPS: <br>
+Even thought there are more threads, the QPS is smaller due to larger delay. <br>
+<code>Avg QPS</code> = 199241/116 = 1717</p>
+
+<p>(3) Error type and Error Ratio <br>
+Only 11 thread met response <code>Time Out</code>(&gt;20s) . No other errors. <br>
+<code>Error Ratio</code> is 11/200000.</p>
+
+<h4 id="test-3-10000-x-100">Test 3: 10000 x 100</h4>
+
+<p>The last test is much more threads. <br>
+The log file is <code>/report/TestData/log10000x100.csv</code> .  <br>
+My client PC goes to 100% so it contributes to the delay and failure too. <br>
+The test takes about 119s. The Server CPU burden goes up to 90% but highly unstable. <br>
+<img src="https://lh3.googleusercontent.com/-k59ZGFuPxVs/V5YFUMw7a0I/AAAAAAAABFc/InZXR7u9jhYzexhlZTGv_sSiOAvH63gywCLcB/s0/2000.100.1.PNG" alt="enter image description here" title="2000.100.1.PNG"></p>
+
+<p>(1) Response Delay <br>
+The highest delay recorded is larger than 20s. This is due to Client side CPU burden in creating threads. After all threads came to run, there are still some delay &gt; 10s. </p>
+
+<p>(2) QPS <br>
+<code>Avg QPS</code> = 41531/119 = 349. Much lower than less threads.</p>
+
+<p>(3) Error Type and Error Ratio <br>
+There are <code>Time Out</code> and <code>Unable to invoke request</code> errors. <br>
+In fact 9729 Threads met error in 41531 requests. <br>
+Error Ratio = 23.4%</p>
+
+<h2 id="bottle-neck-analysis">Bottle Neck Analysis</h2>
+
+
+
+<h4 id="the-cpu-speed-of-the-server">The CPU speed of the server</h4>
+
+<p>Our REST API is CPU intensive only. The data transmitted per request is very little. It is totally stateless, with no database query or disk IO.  <br>
+The only limitation of the server is the CPU ability. As we can see from the images above, when the server CPU usage rises up to 100%, the client response <code>Time Out</code> or can not open new connection.</p>
+
+
+
+<h4 id="the-network-speed-and-distance-between-the-server-and-the-clients">The network speed and distance between the server and the clients</h4>
+
+<p>Besides CPU response time, the response delay in http request also comes from the distance (number of routers) between the server and clients. <br>
+In addition the server network bandwidth also determines the speed it receives and sends data. </p>
+
+
+
+<h4 id="the-jvm-performance-and-garbage-collection">The JVM performance and garbage collection</h4>
+
+<p>JVM has automatic garbage collection mechanism. But when providing too many services concurrently, the JVM will have to collect garbage frequently for the used objects.</p>
+
+<h2 id="optimization">Optimization</h2>
+
+
+
+<h4 id="for-our-simple-calculator-api">For our simple calculator API</h4>
+
+<p>Based on the bottle necks analyzed above, there are three things we can do to improve the high concurrency performance of the Calculator API.</p>
+
+<ul>
+<li>Distributed Multi-core Servers</li>
+<li>Deploy servers near the target clients</li>
+<li>Reuse objects to reduce garbage collection.</li>
+</ul>
+
+<p>In fact we still need a server to load balance the requests. Compared to our simple API, the load balancing server has more work to do.</p>
+
+<h4 id="for-rest-services-in-reality">For REST Services in Reality.</h4>
+
+<p>In reality, a rest services may have such abilities:</p>
+
+<ul>
+<li><p>Return large size static data, such as HTML, images, PDF, videos. <br>
+<strong>Optimize</strong>: Cache the data on CDN, which are distributed servers near users.</p></li>
+<li><p>Heavy reading of database on different servers <br>
+<strong>Optimize</strong>:  Cache the database in RAM (use Memcached or Redis)</p></li>
+<li><p>Heavy transaction business of database on remote servers <br>
+<strong>Optimize</strong> Message Queuing or  Stored Procedure for database operation</p></li>
+</ul>
