@@ -40,8 +40,12 @@ class TestThread extends Thread{
     public void run(){
     	
     	CalculatorClient.activeThreads++;
-        
-        for(int i=0; i<testCount; i++){
+    	
+    	boolean inf = false;
+        if(testCount == -1){
+        	inf = true;	
+        }
+        for(int i=0; inf || i<testCount; i++){
             long startTime = System.currentTimeMillis();
             long ms = -1;
             
@@ -115,14 +119,16 @@ class TestThread extends Thread{
                             + " , " + CalculatorClient.activeThreads;
                 }
                 System.out.println(ret);
-                try {
-                    CalculatorClient.writer.write(csv+'\n');
-                    
-                } catch (IOException e) {
-                    System.out.println("Writing log.csv failed");
-                    break;
-                }
                 
+                if(!inf || i%1000 == 0 ){
+	                try {
+	                    CalculatorClient.writer.write(csv+'\n');
+	                    
+	                } catch (IOException e) {
+	                    System.out.println("Writing log.csv failed");
+	                    break;
+	                }
+                }
                 
                 
             }
@@ -199,6 +205,7 @@ public class CalculatorClient {
                 
                 numUser = Integer.valueOf(args[0]);
                 requestsPerUser = Integer.valueOf(args[1]);
+     
                 
                 if(args.length > 2){
                     opSymbol = args[2];
@@ -243,15 +250,27 @@ public class CalculatorClient {
         
         
         //Prepare threads
-        List<TestThread> threads = new ArrayList<>();
+        //List<TestThread> threads = new ArrayList<>();
+        testStartTime = System.currentTimeMillis();
             
         for (int i=0; i< numUser; i++){
             Client client = ClientBuilder.newClient();
 
             try {
                 WebTarget target = client.target("http://52.42.56.228:8080")
+                //WebTarget target = client.target("http://findingmyroommate.com:8080")
                         .path(getOpName(opSymbol, i)).queryParam("operand1", getOp(op1)).queryParam("operand2", getOp(op2));
-                threads.add(new TestThread(target, client, requestsPerUser));
+                
+                //First test: create and start together
+                //threads.add(new TestThread(target, client, requestsPerUser));
+                
+                //start and wait a sencond one by one
+                (new TestThread(target, client, requestsPerUser)).start();
+                try {
+					Thread.sleep(i/5);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
 
             } catch (InputMismatchException e) {
                 System.out.println(e.getMessage());
@@ -259,11 +278,11 @@ public class CalculatorClient {
             }
         }
         
-        testStartTime = System.currentTimeMillis();
-        //Start threads
-        for (TestThread t : threads){
-            t.start();
-        }
+        
+        //Start threads together
+//        for (TestThread t : threads){
+//            t.start();
+//        }
 
     }
 
